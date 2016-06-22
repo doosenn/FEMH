@@ -68,6 +68,7 @@ object FEMH{
     //Event dictionary, a HashMap[String, Int]
     val diff_items = sequence_rdd.map(_._1).distinct().collect()
     val dictionary = getDictionary(diff_items, sourceItems)
+    val reverseDic = dictionary.map(x=>(x._2, x._1))
     val b_dictionary = sc.broadcast(dictionary)
     writeDictionary(dictionary)
 
@@ -142,13 +143,19 @@ object FEMH{
          val dmoMine = new DMO(mtd, minSupport, 4)
          eps ++= dmoMine.mine(t)
       }
-      eps.distinct.groupBy(_._1).map(x=>(x._1, x._2.length)).filter(_._2 >= minSupport)
+      //checkMO(eps)
+      val ret = checkMO(eps)
+      ret
     })
 
     val d_episodes = episodes.collect()
-    var epsMsg = "\nFEMH results:\n"
+    var epsMsg = "\nFEMH results "+d_episodes.length+" :\n"
     for(e <- d_episodes){
-      epsMsg += e._1+"\t"+e._2+"\n"
+      epsMsg += e._1+"\t"
+      for(occ <- e._2) {
+        epsMsg += occ +"\t"
+      }
+      epsMsg += "\n"
     }
     mylog.info(epsMsg)
 
@@ -268,6 +275,39 @@ object FEMH{
       else
         false
     })
+  }
+
+  def checkMO(eps : ArrayBuffer[(String, Array[String])]) = {
+    val epsCheck = eps.
+      flatMap(x => {
+        val temp = new ArrayBuffer[(String, String)]()
+        for(occ <- x._2){
+          temp += ((x._1, occ))
+        }
+        temp
+      }).
+      groupBy(_._1).
+      map(x => {
+        val occs = (for(t <- x._2) yield t._2).distinct
+        val checkOccs = new ArrayBuffer[String]()
+        checkOccs += occs(0)
+        if(occs.length > 1){
+          var i = 0
+          var j = 1
+          while(j < occs.length){
+            val preE = StringUtils.split(occs(i), ":")(1).toInt
+            val sufB = StringUtils.split(occs(j), ":")(0).toInt
+            if(preE < sufB){
+              checkOccs += occs(j)
+              i = j
+            }
+            j += 1
+          }
+        }
+        (x._1, checkOccs.toArray)
+      }).
+      filter(_._2.length >= minSupport)
+    epsCheck
   }
   
   def saveAsObjectFile[Partition](rdd: RDD[Partition], path: String) = {
