@@ -1,11 +1,12 @@
 package ict.mldm.main
 
+import ict.mldm.alg.{DMO, MESELO}
 import ict.mldm.debug.MyLog
 import ict.mldm.util.{Partition, Transaction}
+
 import java.io.{BufferedReader, ByteArrayOutputStream, File, FileWriter, InputStreamReader}
 import java.net.URI
 
-import ict.mldm.alg.{DMO, MESELO}
 import org.apache.commons.lang.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -102,11 +103,11 @@ object FEMH{
     val flist_keys = flist.map(_._1).collect()
     val b_flist_keys = sc.broadcast(flist_keys)
 
-    //partitions
-    val partitions = flist.map(x => {
+    //transactions
+    val transactions = flist.flatMap(x => {
+      val ts = new ArrayBuffer[Transaction]()
       val pivot = x._1
       val occs = x._2
-      val p = new Partition(pivot)
       for(occ <- occs){
         var seq = ArrayBuffer[(Int, Int)]((pivot, occ))
         val keys = b_flist_keys.value
@@ -116,41 +117,33 @@ object FEMH{
         val t = new Transaction(pivot, occ)
         seq = seq.sortBy(_._2)
         t.setSeq(seq)
-        p.addTran(t)
+        ts += t
       }
-      p
-    })
-//    val d_partitions = partitions.collect()
-//    for(p <- d_partitions) {
-//      var parMsg = "\nPartition " + p.getPivot+":\n"
-//      for(t <- p.getTrans) {
-//        parMsg += t.getTime+"::\t"
-//        for(ses <- t.getSeq){
-//          parMsg += ses._1+":"+ses._2+"\t"
-//        }
-//        parMsg += "\n"
-//      }
-//      mylog.info(parMsg)
-//    }
-
-    val episodes = partitions.flatMap(x => {
-      val eps = new ArrayBuffer[(String, Array[String])]()
-      val ts = x.getTrans
-      for(t <- ts) {
-//        val meseloMine = new MESELO()
-//        eps ++= meseloMine.mine(t)
-
-         val dmoMine = new DMO(mtd, minSupport, 4)
-         eps ++= dmoMine.mine(t)
-      }
-      //checkMO(eps)
-      val ret = checkMO(eps)
-      ret
+      ts
     })
 
-    val d_episodes = episodes.collect()
-    var epsMsg = "\nFEMH results "+d_episodes.length+" :\n"
-    for(e <- d_episodes){
+    val episodes = transactions.flatMap(x => {
+      val eps = new ArrayBuffer[(String, String)]()
+
+//    val meseloMine = new MESELO()
+//    eps ++= meseloMine.mine(t)
+
+      val dmoMine = new DMO(mtd, minSupport, 4)
+      eps ++= dmoMine.mine(x).flatMap(x => {
+        val tmp = new ArrayBuffer[(String, String)]()
+        for(occ <- x._2){
+          tmp += ((x._1, occ))
+        }
+        tmp
+      })
+      eps
+    }).groupByKey().
+      map(x => (x._1, x._2.toArray)).
+      filter(_._2.length >= minSupport)
+
+    val display_episodes = checkMO(episodes.collect())
+    var epsMsg = "\nFEMH results "+display_episodes.length+" :\n"
+    for(e <- display_episodes){
       epsMsg += e._1+"\t"
       for(occ <- e._2) {
         epsMsg += occ +"\t"
@@ -158,10 +151,13 @@ object FEMH{
       epsMsg += "\n"
     }
     mylog.info(epsMsg)
+    logger.info(epsMsg)
 
     val endTime = System.currentTimeMillis()
     val timeDiff = endTime - startTime
-    println("Parallel FEMH finished in "+ timeDiff +".")
+    val finishedMsg = "Parallel FEMH finished in "+ timeDiff +"."
+    println(finishedMsg)
+    logger.info(finishedMsg)
   }
 
   def parameters(args: Array[String]) = {
@@ -277,18 +273,10 @@ object FEMH{
     })
   }
 
-  def checkMO(eps : ArrayBuffer[(String, Array[String])]) = {
+  def checkMO(eps : Array[(String, Array[String])]) = {
     val epsCheck = eps.
-      flatMap(x => {
-        val temp = new ArrayBuffer[(String, String)]()
-        for(occ <- x._2){
-          temp += ((x._1, occ))
-        }
-        temp
-      }).
-      groupBy(_._1).
       map(x => {
-        val occs = (for(t <- x._2) yield t._2).distinct
+        val occs = x._2.distinct.sortBy(_.split(":")(0).toInt)
         val checkOccs = new ArrayBuffer[String]()
         checkOccs += occs(0)
         if(occs.length > 1){
