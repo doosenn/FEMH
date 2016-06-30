@@ -23,4 +23,10 @@ class MyLog {
     fw.write(time+"\t"+message+"\n")
     fw.flush()
   }
+
+  def write(message : Any) = {
+    val fw = new FileWriter(new File(file), true)
+    fw.write(message+"\n")
+    fw.flush()
+  }
 }

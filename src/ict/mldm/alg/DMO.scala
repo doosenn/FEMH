@@ -10,13 +10,11 @@ import scala.collection.mutable.ArrayBuffer
   */
 class DMO {
   private var mtd : Int = 0
-  private var minSupport = 0
   private var maxIter = 0
 
-  def this(mtd : Int, minSupport : Int, maxIter : Int) = {
+  def this(mtd : Int, maxIter : Int) = {
     this()
     this.mtd = mtd
-    this.minSupport = minSupport
     this.maxIter = maxIter
   }
 
