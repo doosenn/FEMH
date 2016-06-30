@@ -27,7 +27,7 @@ class PRMOD {
     val occs = new ArrayBuffer[(String, (Int, Int))]()
     occs ++= expand(pivot.toString, (time, time), seq, RIGHT)
     occs ++= expand(pivot.toString, (time, time), seq, LEFT)
-
+    occs
   }
 
   def expand(fix : String, interval : (Int, Int), array : Array[(Int, Int)], dir : Boolean):ArrayBuffer[(String, (Int, Int))] = {
@@ -35,8 +35,8 @@ class PRMOD {
     if(StringUtils.split(fix, "->").length < maxLen){
       if(dir == LEFT) {
         val tmpSet = new HashSet[String]()
-        val _left = array.filter(_._2 < interval._1)
-        val _right = array.filter(_._2 > interval._2)
+        val _left = array.filter(x => {interval._2 - x._2 <= mtd && x._2 < interval._1})
+        val _right = array.filter(x => {x._2 - interval._1 <= mtd && x._2 > interval._2})
         for(t <- _left.reverse) {
           val ex = t._1 + "->" + fix
           if(!tmpSet.contains(ex)) {
@@ -48,7 +48,7 @@ class PRMOD {
         }
       }else{
         val tmpSet = new HashSet[String]()
-        val _right = array.filter(_._2 > interval._2)
+        val _right = array.filter(x => {x._2 - interval._1 <= mtd && x._2 > interval._2})
         for(t <- _right) {
           val ex = fix + "->" + t._1
           if(!tmpSet.contains(ex)) {
