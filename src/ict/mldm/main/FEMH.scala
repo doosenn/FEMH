@@ -1,6 +1,6 @@
 package ict.mldm.main
 
-import ict.mldm.alg.{PRMOD, MESELO, DMO}
+import ict.mldm.alg.{PRMOD, PRMOD, DMO}
 import ict.mldm.debug.MyLog
 import ict.mldm.util.Transaction
 
@@ -29,16 +29,24 @@ object FEMH{
   private var outputFile : String = null
   private var minSupport : Int = 0
   private var mtd : Int= 0
-  private var maxIter : Int = 0
+  private var maxLen : Int = 0
   private var mode : String = "local"
 
   private val logger = Logger.getLogger(this.getClass)
   private val mylog = new MyLog("./data/debug.info")
 
   def main(args: Array[String]): Unit = {
-    PropertyConfigurator.configure("log4j.properties")
-    parameters(args)
-    run()
+//    PropertyConfigurator.configure("log4j.properties")
+//    parameters(args)
+//    run()
+    val p = new PRMOD(3, 4)
+    val seq = Array((1,1), (2,2), (2,3),(4, 4), (2, 5), (3, 5), (4, 6), (3, 7))
+    val pivot = 4
+    val time = 4
+    val expand = p.expand(pivot.toString, (time, time), seq, true)
+    for(e <- expand) {
+      println(e._1+"\t"+e._2)
+    }
   }
 
   def run() = {
@@ -161,9 +169,6 @@ object FEMH{
     val episodes = transactions.flatMap(x => {
       val eps = new ArrayBuffer[(String, String)]()
 
-//    val meseloMine = new MESELO()
-//    eps ++= meseloMine.mine(t)
-
       val dmoMine = new DMO(mtd, 4)
       eps ++= dmoMine.mine(x).flatMap(x => {
         val tmp = new ArrayBuffer[(String, String)]()
@@ -212,8 +217,12 @@ object FEMH{
       else if (args(i).equalsIgnoreCase("-w")) {
         this.mtd = args(i + 1).toInt
       }
-      else if (args(i).equalsIgnoreCase("-d")) {
-        this.maxIter = args(i + 1).toInt
+      else if (args(i).equalsIgnoreCase("-l")) {
+        val temp = args(i + 1).toInt
+        if(temp == 0)
+          this.maxLen = Int.MaxValue
+        else
+          this.maxLen = temp
       }
       else if (args(i).equalsIgnoreCase("-m")) {
         this.mode = args(i + 1)
