@@ -30,6 +30,12 @@ class PRMOD {
     occs
   }
 
+  /*
+    This method has a disadvantege, when mining a transaction like {(1,1), (2,2), (2,3), (3,4)},whose pivot is
+     3 in the last index, after left-expanding we get minimal occurrence 2->3 whose window is [3, 4], while window
+     [2,4] is not minimal and we abandon it. Contineously, left-expanding 2->3 [3, 4] we get 1->2->3, whose window is
+      [1,3,4], this brings a bug. In traditional way, the minimal window of 1->2->3 is [1, 2, 4].
+   */
   def expand(fix : String, interval : (Int, Int), array : Array[(Int, Int)], dir : Boolean):ArrayBuffer[(String, (Int, Int))] = {
     val expanded = new ArrayBuffer[(String, (Int, Int))]()
     if(StringUtils.split(fix, "->").length < maxLen){
@@ -42,11 +48,13 @@ class PRMOD {
           if(!tmpSet.contains(ex)) {
             val tmp = (ex, (t._2, interval._2))
             expanded += tmp
-            expanded ++= expand(tmp._1, tmp._2, _left, LEFT)
+            expanded ++= expand(tmp._1, tmp._2, array, LEFT) //para[2] must be array, not _left
             expanded ++= expand(tmp._1, tmp._2, _right, RIGHT)
           }
+          tmpSet.add(ex)
         }
-      }else{
+      }
+      else {
         val tmpSet = new HashSet[String]()
         val _right = array.filter(x => {x._2 - interval._1 <= mtd && x._2 > interval._2})
         for(t <- _right) {
@@ -56,11 +64,11 @@ class PRMOD {
             expanded += tmp
             expanded ++= expand(tmp._1, tmp._2, _right, RIGHT)
           }
+          tmpSet.add(ex)
         }
       }
     }
     expanded
   }
-
 
 }

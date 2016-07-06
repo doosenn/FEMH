@@ -7,57 +7,79 @@ import scala.collection.mutable.ArrayBuffer
   */
 class TreeNode {
   private var value : Int = 0
-  private var time : Int = 0
+  private var start : Int = 0
+  private var end : Int = 0
   private var indexInFlist = 0
   private var children : ArrayBuffer[TreeNode] = null
   private var flistSize : Int = 0
-  private var exists : Array[Boolean] = null
-  private var lastMO : Boolean = true
+  private var exists : Array[Int] = null
+  private var isLeftChildOfParent : Any = true
   private var episode : String = null
 
-  def this(value: Int, time: Int, flistSize: Int, indexInFlist : Int) = {
+  private val RIGHT = false
+  private val LEFT = true
+
+  def this(value: Int, time : Int, flistSize: Int, indexInFlist : Int, isLeftChildOfParent : Any) = {
     this()
     this.value = value
-    this.time = time
+    this.start = time
+    this.end = time
     this.flistSize = flistSize
     this.indexInFlist = indexInFlist
-    this.exists = new Array[Boolean](flistSize).map(_ => false)
+    this.exists = new Array[Int](flistSize).map(_ => 0)
+    this.children = new ArrayBuffer[TreeNode]()
+    this.isLeftChildOfParent = isLeftChildOfParent
   }
 
-  def isChildContained(indexOfThisChildInFlist: Int) = {
-    if(exists(indexOfThisChildInFlist))
+  def isLeftContained(indexOfThisChildInFlist: Int) = {
+    if((exists(indexOfThisChildInFlist) & 0x10) == 0x10)
       true
     else
       false
   }
 
-  def addLChild(child : TreeNode) = {
-    if(isChildContained(child.getIndexInFlist))
-      children += child
+  def isRightContained(indexOfThisChildInFlist : Int) = {
+    if((exists(indexOfThisChildInFlist) & 0x01) == 0x01)
+      true
+    else
+      false
   }
 
-  def getValue = value
+  def getValue = this.value
 
-  def getTime = time
+  def getWindow = (this.start, this.end)
 
-  def getIndexInFlist = indexInFlist
+  def getStart = this.start
 
-  def getChildren = children
+  def getEnd = this.end
 
-  def getExists = exists
+  def getIndexInFlist = this.indexInFlist
 
-  def getFlistSize = flistSize
+  def getChildren = this.children
 
-  def isLastMO = lastMO
+  def getExists = this.exists
 
-  def getEpisode = episode
+  def getFlistSize = this.flistSize
+
+  def getIsLeftChildOfParent() = this.isLeftChildOfParent
+
+  def getEpisode = this.episode
 
   def setValue(value: Int) = {
     this.value = value
   }
 
-  def setTime(time: Int) = {
-    this.time = time
+  def setWindow(window: (Int, Int)) = {
+    this.start = window._1
+    this.end = window._2
+  }
+
+  def setStart(start : Int) = {
+    this.start = start
+  }
+
+  def setEnd(end : Int) = {
+    this.end = end
   }
 
   def setIndexInFlist(index: Int) = {
@@ -68,16 +90,34 @@ class TreeNode {
     this.children = children
   }
 
+  def addChild(child : TreeNode) = {
+    this.children += child
+  }
+
   def setFlistSize(size: Int) = {
     this.flistSize = size
   }
 
-  def setExists(exists:Array[Boolean]) = {
-    this.exists = exists
+  def setExists(index : Int, dir : Boolean) = {
+    if(dir == LEFT) {
+      this.exists(index) |= 0x10
+    }
+    else if(dir == RIGHT){
+      this.exists(index) |= 0x01
+    }
   }
 
-  def setLastMO(lastMO: Boolean) = {
-    this.lastMO = lastMO
+  def clrExists(index : Int, dir : Boolean) = {
+    if(dir == LEFT) {
+      this.exists(index) &= 0x0f
+    }
+    else if(dir == RIGHT){
+      this.exists(index) &= 0xf0
+    }
+  }
+
+  def setIsLeftChildOfParent(value : Any) = {
+    this.isLeftChildOfParent = value
   }
 
   def setEpisode(item : String) = {
