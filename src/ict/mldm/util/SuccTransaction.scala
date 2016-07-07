@@ -8,7 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 class SuccTransaction {
   private var pivot : Int = 0
   private var pivots : ArrayBuffer[Int] = null
-  private var seq : ArrayBuffer[(Int, Int)] = null
+  private var seq : ArrayBuffer[(Int, ArrayBuffer[Int])] = null
 
   def getPivot = pivot
 
@@ -24,7 +24,7 @@ class SuccTransaction {
     this.pivots = pivots
   }
 
-  def setSeq(seq : ArrayBuffer[(Int, Int)]) = {
+  def setSeq(seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
     this.seq = seq
   }
 
@@ -33,7 +33,7 @@ class SuccTransaction {
     this.pivot = pivot
   }
 
-  def this(pivot: Int, pivots : ArrayBuffer[Int], seq : ArrayBuffer[(Int, Int)]) = {
+  def this(pivot: Int, pivots : ArrayBuffer[Int], seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
     this()
     this.pivot = pivot
     this.pivots = pivots

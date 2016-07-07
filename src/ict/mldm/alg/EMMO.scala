@@ -1,7 +1,6 @@
 package ict.mldm.alg
 
 import ict.mldm.util.{SuccTransaction, TreeNode}
-import org.apache.commons.lang.StringUtils
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 
 /**
@@ -19,7 +18,8 @@ class EMMO {
   private var container = new ArrayBuffer[(String, String)]()
   private var result = new ArrayBuffer[(String, Int)]()
   private var rightExpandedNode = new HashSet[String]()
-  private val _right = new ArrayBuffer[(Int, Int)]()
+//  private var leftExpandedNode = new HashSet[String]()
+  private var seq : ArrayBuffer[(Int, ArrayBuffer[Int])] = null
 
   def this(mtd : Int, maxLen : Int, flist_keys : Array[Int]) = {
     this()
@@ -32,142 +32,176 @@ class EMMO {
     val pivot = t.getPivot
     this.pivot = pivot
     val seq = t.getSeq
-
-    for((item, time) <- seq) {
-      rightExpand(item, time)
+    this.seq = seq
+    //right expand process
+    for((time, items) <- seq) {
+      rightExpand(items, time)
     }
+    //unfinished right-expand-trees but the seq has ended
+    for(tree <- treeList) {
+      calTree(tree)
+    }
+
+    //clean the treeList
     treeList.clear()
-    for((item, time) <- seq.reverse) {
-      leftExpand(item, time)
-      this._right.insert(0, (item, time))
+
+    //left expand process
+    for((time, items) <- seq.reverse) {
+      leftExpand(items, time)
+//      if(time == 1) {
+//        println("-------------")
+//        for(tree <- treeList) {
+//          for(node <- tree){
+//            println(node.getNodeMsg+"\t"+node.isMO())
+//          }
+//          println("-------------")
+//        }
+//      }
+    }
+    //unfinished left-expand-trees but the seq has ended
+    for(tree <- treeList) {
+      calTree2(tree)
     }
 
-    val episodes = getResult()
-    episodes
-  }
-
-  def leftExpand(item : Int, time : Int) = {
-    val tmpSet = new HashSet[String]()
-    val indexOfFlist = this.flist_keys.indexOf(item)
-    for(i <- this.treeList.indices.reverse) { //  note reverse because of minimal occurrence
-    val tmpList = this.treeList(i)
-      val rootWindow = tmpList(0).getWindow
-      if(rootWindow._2 - time > this.mtd) {  //  when newly-come item is beyond mtd from root pivot
-        calTree(tmpList)
-        this.treeList.remove(i)
-      }
-      else if(time < rootWindow._1) { //  update the whole tree
-        for(node <- tmpList) {
-          val episode = node.getEpisode
-          if(StringUtils.split(episode, "->").length < this.maxLen) {
-            val expand_eps = item + "->" + episode
-            if(!tmpSet.contains(expand_eps) && !node.isLeftContained(indexOfFlist)) {
-              node.setExists(indexOfFlist, LEFT)
-              val newNode = new TreeNode(item, time, this.flist_keys.length, this.flist_keys.indexOf(item), LEFT)
-              newNode.setEpisode(expand_eps)
-              newNode.setEnd(rootWindow._2)
-              tmpList += newNode
-              node.addChild(newNode)
-              rightExpandANodeInLeftBranch(newNode, _right)
-              tmpSet += expand_eps
-            }
-          }
-        }
-      }
-    }
-
-    if(item == this.pivot) {  //  build a new tree
-    val newNode = new TreeNode(item, time, this.flist_keys.length, this.flist_keys.indexOf(this.pivot), "root")
-      newNode.setEpisode(item.toString)
-      val newTree = ArrayBuffer[TreeNode](newNode)
-      this.treeList += newTree
+    val d = container.groupBy(_._1)
+    for(dd <- d){
+      print(dd._1+":\t")
+      for(occ <- dd._2)
+        print(occ._2+"\t")
+      println
     }
   }
 
-  def rightExpandANodeInLeftBranch(node : TreeNode, rightArray : ArrayBuffer[(Int, Int)]) = {
-    val episode = node.getEpisode
-    val start = node.getStart
-    val end = node.getEnd
-    val nodeMsg = episode + "@" + start + ":" + end
-    val rightExpandSubtree = new ArrayBuffer[TreeNode]()
-    if(!this.rightExpandedNode.contains(nodeMsg) && StringUtils.split(episode, "->").length < this.maxLen) {
-      for(r <- rightArray) {
-        val newNodes = new ArrayBuffer[TreeNode]()
-        val item = r._1
-        val time = r._2
-        var tmp = updateNode(node, item, time)
-        if(tmp != null) {
-          newNodes += tmp
-        }
-        for(n <- rightExpandSubtree) {
-          tmp = updateNode(node, item, time)
-          if(tmp != null) {
-            newNodes += tmp
-          }
-        }
-        rightExpandSubtree ++= newNodes
-      }
-    }
-    calTree(rightExpandSubtree)
-  }
-
-  def updateNode(node : TreeNode, item : Int, time : Int) = {
-    var newNode : TreeNode= null
-    val episode = node.getEpisode
-    val start = node.getStart
-    val indexOfFlist = this.flist_keys.indexOf(item)
-    val expand_eps = episode + "->" + item
-    val newNodeMsg = expand_eps + "@" + start + ":" + time
-    val episodeLen = StringUtils.split(episode, "->").length
-    if(!this.rightExpandedNode.contains(newNodeMsg) && !node.isRightContained(indexOfFlist) && episodeLen < this.maxLen) {
-      newNode = new TreeNode(item, time, this.flist_keys.length, indexOfFlist, RIGHT)
-      newNode.setStart(start)
-      newNode.setEpisode(expand_eps)
-      node.setExists(indexOfFlist, RIGHT)
-      node.addChild(newNode)
-      this.rightExpandedNode += newNodeMsg
-    }
-    newNode
-  }
-
-  def rightExpand(item : Int, time : Int) = {
-    val tmpSet = new HashSet[String]()
-    val indexOfFlist = this.flist_keys.indexOf(item)
-    for(i <- this.treeList.indices.reverse) { //  note reverse because of minimal occurrence
+  def rightExpand(items : ArrayBuffer[Int], time : Int) = {
+    val Q = new HashSet[String]()
+    if(items.contains(this.pivot))
+      Q += pivot.toString
+    for(i <- this.treeList.indices.reverse) {
       val tmpList = this.treeList(i)
-      val rootWindow = tmpList(0).getWindow
-      if(time - rootWindow._1 > this.mtd) {  //  when newly-come item is beyond mtd from root pivot
+      val rootStart = tmpList(0).getStart
+      val rootEnd = rootStart
+      if(time - rootStart > this.mtd) {  //  when newly-come item is beyond mtd from root pivot
         calTree(tmpList)
         this.treeList.remove(i)
       }
-      else if(time > rootWindow._2) { //  update the whole tree
+      else if(time > rootEnd) { //  update the whole tree
         for(node <- tmpList) {
           val episode = node.getEpisode
-          if(StringUtils.split(episode, "->").length < this.maxLen) {
-            val expand_eps = episode + "->" + item
-            val nodeMsg = expand_eps + "@" + rootWindow._1 + ":" + time
-            if(!tmpSet.contains(expand_eps) && !node.isRightContained(indexOfFlist)) {
-              node.setExists(indexOfFlist, RIGHT)
-              val newNode = new TreeNode(item, time, this.flist_keys.length, this.flist_keys.indexOf(item), RIGHT)
-              newNode.setEpisode(expand_eps)
-              newNode.setStart(rootWindow._1)
-              tmpList += newNode
-              node.addChild(newNode)
-              this.rightExpandedNode += nodeMsg
-              tmpSet += expand_eps
+          for(item <- items) {
+            if(node.isMO() && node.getEpisodeLen < this.maxLen) {
+              val indexInFlist = this.flist_keys.indexOf(item)
+              if(!node.isRightContained(indexInFlist)) {
+                node.setExists(indexInFlist, RIGHT)
+                val newNode = new TreeNode(item, this.flist_keys.length, indexInFlist)
+                val newEpisode = episode+"->"+item
+                newNode.setWindow(node.getStart, time)
+                newNode.setEpisode(newEpisode)
+                tmpList += newNode
+                Q += newEpisode
+                this.rightExpandedNode += newNode.getNodeMsg
+              }
             }
+          }
+          if(Q.contains(episode)) {
+            node.setIsMO(false)
           }
         }
       }
     }
 
-    if(item == this.pivot) {  //  build a new tree
-      val newNode = new TreeNode(item, time, this.flist_keys.length, this.flist_keys.indexOf(this.pivot), "root")
-      newNode.setEpisode(item.toString)
-      val newTree = ArrayBuffer[TreeNode](newNode)
-      this.treeList += newTree
-      this.rightExpandedNode += (item.toString+"@"+time+":"+time)
+    if(items.contains(this.pivot)) {
+      val newNode = new TreeNode(this.pivot, this.flist_keys.length, this.flist_keys.indexOf(this.pivot))
+      newNode.setWindow(time, time)
+      newNode.setEpisode(pivot.toString)
+      this.treeList += ArrayBuffer[TreeNode](newNode)
+      this.rightExpandedNode += newNode.getNodeMsg
     }
+  }
+
+  def leftExpand(items : ArrayBuffer[Int], time : Int) = {
+    val Q = new HashSet[String]()
+    if(items.contains(this.pivot))
+      Q += pivot.toString
+    for(i <- this.treeList.indices.reverse) {
+      val tmpList = this.treeList(i)
+      val rootStart = tmpList(0).getStart
+      val rootEnd = rootStart
+      if(rootEnd - time > this.mtd) {
+        calTree2(tmpList)
+        this.treeList.remove(i)
+      }
+      else if(time < rootStart) { //  update the whole tree
+        for(node <- tmpList) {
+          val episode = node.getEpisode
+          for(item <- items) {
+            if(node.isMO() && node.getEpisodeLen < this.maxLen) {
+              val indexInFlist = this.flist_keys.indexOf(item)
+              if(!node.isLeftContained(indexInFlist)) {
+                node.setExists(indexInFlist, LEFT)
+                val newNode = new TreeNode(item, this.flist_keys.length, indexInFlist)
+                val newEpisode = item+"->"+episode
+                newNode.setWindow(time, node.getEnd)
+                newNode.setEpisode(newEpisode)
+                tmpList += newNode
+                Q += newEpisode
+                if(!this.rightExpandedNode.contains(newNode.getNodeMsg)) {
+                  rightExpandANodeInLeftBranch(newNode)
+                }
+              }
+            }
+          }
+          if(Q.contains(episode)) {
+            node.setIsMO(false)
+          }
+        }
+      }
+    }
+
+    if(items.contains(this.pivot)) {
+      val newNode = new TreeNode(this.pivot, this.flist_keys.length, this.flist_keys.indexOf(this.pivot))
+      newNode.setWindow(time, time)
+      newNode.setEpisode(pivot.toString)
+      this.treeList += ArrayBuffer[TreeNode](newNode)
+      this.rightExpandedNode += newNode.getNodeMsg
+    }
+  }
+
+  def rightExpandANodeInLeftBranch(root : TreeNode) = {
+    val start = root.getStart
+    val end = root.getEnd
+    val _right = seq.filter(x => (x._1 - start <= this.mtd && x._1 > end))
+    val tree = ArrayBuffer[TreeNode](root)
+    for(ses <- _right) {
+      val time = ses._1
+      for(node <- tree; if node.getEpisodeLen < this.maxLen) {
+        val start = node.getStart
+        val end = node.getEnd
+        val episode = node.getEpisode
+        for(item <- ses._2) {
+          val indexInFlist = this.flist_keys.indexOf(item)
+          if (!node.isRightContained(indexInFlist)) {
+            val newEpisode = episode + "->" + item
+            val newNode = new TreeNode(item, this.flist_keys.length, indexInFlist)
+            newNode.setEpisode(newEpisode)
+            newNode.setWindow(start, time)
+            val newNodeMsg = newNode.getNodeMsg
+            if (newNodeMsg.equals("1->3->3@3:7"))
+              println(root.getNodeMsg)
+            if (!this.rightExpandedNode.contains(newNodeMsg)) {
+              node.setExists(indexInFlist, RIGHT)
+              this.rightExpandedNode += newNodeMsg
+              tree += newNode
+            }
+          }
+        }
+      }
+    }
+    tree.remove(0)
+//    println("Right expand in left branch:")
+//    for(node <- tree)
+//      println(node.getNodeMsg)
+//    println("---------------")
+    calTree(tree)
   }
 
   def calTree(tree : ArrayBuffer[TreeNode]) = {
@@ -176,6 +210,18 @@ class EMMO {
       val start = node.getStart
       val end = node.getEnd
       this.container += ((episode, start.toString+":"+end))
+    }
+  }
+
+  def calTree2(tree : ArrayBuffer[TreeNode]) = {
+    for(node <- tree) {
+      val episode = node.getEpisode
+      val start = node.getStart
+      val end = node.getEnd
+      val nodeMsg = node.getNodeMsg
+      if(!this.rightExpandedNode.contains(nodeMsg)) {
+        this.container += ((episode, start.toString+":"+end))
+      }
     }
   }
 

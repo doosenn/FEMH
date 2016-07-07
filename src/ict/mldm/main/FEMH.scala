@@ -1,9 +1,8 @@
 package ict.mldm.main
 
-import ict.mldm.alg.{PRMOD, PRMOD, DMO}
+import ict.mldm.alg.{DMO, EMMO, PRMOD}
 import ict.mldm.debug.MyLog
-import ict.mldm.util.Transaction
-
+import ict.mldm.util.{SuccTransaction, Transaction}
 import java.io.{BufferedReader, ByteArrayOutputStream, File, FileWriter, InputStreamReader}
 import java.net.URI
 
@@ -39,14 +38,16 @@ object FEMH{
 //    PropertyConfigurator.configure("log4j.properties")
 //    parameters(args)
 //    run()
-    val p = new PRMOD(3, 4)
-    val seq = Array((1,1), (2,2), (2,3),(4, 4), (2, 5), (3, 5), (4, 6), (3, 7))
-    val pivot = 4
-    val time = 4
-    val expand = p.expand(pivot.toString, (time, time), seq, true)
-    for(e <- expand) {
-      println(e._1+"\t"+e._2)
-    }
+    val flist_keys = Array[Int](1, 2, 3)
+    val seq = ArrayBuffer[(Int, ArrayBuffer[Int])]((1, ArrayBuffer(2)), (3, ArrayBuffer(1,2)),
+      (4, ArrayBuffer(3)), (5, ArrayBuffer(3)), (7, ArrayBuffer(1,3)), (8, ArrayBuffer(1)),
+      (9, ArrayBuffer(2)), (11, ArrayBuffer(1)))
+    val t = new SuccTransaction()
+    t.setPivot(3)
+    t.setPivots(ArrayBuffer[Int](4,5,7))
+    t.setSeq(seq)
+    val e = new EMMO(4, 4, flist_keys)
+    e.mine(t)
   }
 
   def run() = {
@@ -62,10 +63,14 @@ object FEMH{
     println("Step 1: Read Sequence Data From File..")
     val lines = sc.textFile(sequenceFile)
 
-    //Sequence of items with format (item, timestamp)
-    val sequence_rdd = lines.map(line=>{
+    //Sequence of items with format (timestamp, items)
+    val sequence_rdd = lines.flatMap(line=>{
+      val temp = new ArrayBuffer[(Int, String)]
       val splits = StringUtils.split(line, '\t')
-      (splits(0), splits(1).toInt)
+      val events = StringUtils.split(splits(1), ",")
+      for(e <- events)
+        temp += ((splits(0).toInt, e))
+      temp
     })
     var currentTime = System.currentTimeMillis()
     var timeDiff = currentTime - startTime
@@ -83,7 +88,7 @@ object FEMH{
     val sourceItems = source.flatMap(StringUtils.split(_, "->"))
 
     //Event dictionary, a HashMap[String, Int]
-    val diff_items = sequence_rdd.map(_._1).distinct().collect()
+    val diff_items = sequence_rdd.map(_._2).distinct().collect()
     val dictionary = getDictionary(diff_items, sourceItems)
     currentTime = System.currentTimeMillis()
     timeDiff = currentTime - startTime
@@ -106,15 +111,15 @@ object FEMH{
     //flist
     println("Step 4: Flist Generating..")
     val flist = sequence_rdd.
-      map(x => (b_dictionary.value(x._1), x._2)).
-      flatMap(x => {
-        val re = getAncestorself(x._1, b_hierarchy.value).map(y => (y, x._2))
+      map(x => (b_dictionary.value(x._2), x._1)).   // item time
+      flatMap(y => {
+        val re = getAncestorself(y._1, b_hierarchy.value).map(z => (z, y._2))
         re
       }).
       groupByKey().
       filter(_._2.size >= minSupport).
       map(x=>(x._1, x._2.toArray.sortWith(_ < _))).
-      sortBy(x=>x._2.length, false)
+      sortBy(_._2.length, false)
 //    val d_flist = flist.collect()
 //    var flistMsg : String = "\n"
 //    for(f <- d_flist){
@@ -143,7 +148,7 @@ object FEMH{
         var seq = ArrayBuffer[(Int, Int)]((pivot, occ))
         val keys = b_flist_keys.value
         for(f <- b_flist.value;if keys.indexOf(pivot) >= keys.indexOf(f._1)) {
-          seq ++= findMTDInArray(occ, f._2).map(x => (f._1, x))   //(event, time)
+          seq ++= findMTDInArray(occ, f._2).map(x => (f._1, x))   //(item, event)
         }
         if(seq.length > 1) {
           val t = new Transaction(pivot, occ)

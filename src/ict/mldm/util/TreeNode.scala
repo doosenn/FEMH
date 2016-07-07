@@ -10,25 +10,20 @@ class TreeNode {
   private var start : Int = 0
   private var end : Int = 0
   private var indexInFlist = 0
-  private var children : ArrayBuffer[TreeNode] = null
   private var flistSize : Int = 0
   private var exists : Array[Int] = null
-  private var isLeftChildOfParent : Any = true
   private var episode : String = null
+  private var isMinimal : Boolean = true
 
   private val RIGHT = false
   private val LEFT = true
 
-  def this(value: Int, time : Int, flistSize: Int, indexInFlist : Int, isLeftChildOfParent : Any) = {
+  def this(value: Int, flistSize: Int, indexInFlist : Int) = {
     this()
     this.value = value
-    this.start = time
-    this.end = time
     this.flistSize = flistSize
     this.indexInFlist = indexInFlist
     this.exists = new Array[Int](flistSize).map(_ => 0)
-    this.children = new ArrayBuffer[TreeNode]()
-    this.isLeftChildOfParent = isLeftChildOfParent
   }
 
   def isLeftContained(indexOfThisChildInFlist: Int) = {
@@ -55,15 +50,17 @@ class TreeNode {
 
   def getIndexInFlist = this.indexInFlist
 
-  def getChildren = this.children
-
   def getExists = this.exists
 
   def getFlistSize = this.flistSize
 
-  def getIsLeftChildOfParent() = this.isLeftChildOfParent
-
   def getEpisode = this.episode
+
+  def getEpisodeLen = this.episode.split("->").length
+
+  def getNodeMsg = this.episode+"@"+this.start+":"+this.end
+
+  def isMO() = this.isMinimal
 
   def setValue(value: Int) = {
     this.value = value
@@ -84,14 +81,6 @@ class TreeNode {
 
   def setIndexInFlist(index: Int) = {
     this.indexInFlist = index
-  }
-
-  def setChildren(children: ArrayBuffer[TreeNode]) = {
-    this.children = children
-  }
-
-  def addChild(child : TreeNode) = {
-    this.children += child
   }
 
   def setFlistSize(size: Int) = {
@@ -116,12 +105,12 @@ class TreeNode {
     }
   }
 
-  def setIsLeftChildOfParent(value : Any) = {
-    this.isLeftChildOfParent = value
-  }
-
   def setEpisode(item : String) = {
     this.episode = item
+  }
+
+  def setIsMO(tf : Boolean) = {
+    this.isMinimal = tf
   }
 
 }
