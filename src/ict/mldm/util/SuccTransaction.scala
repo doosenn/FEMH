@@ -7,21 +7,14 @@ import scala.collection.mutable.ArrayBuffer
   */
 class SuccTransaction {
   private var pivot : Int = 0
-  private var pivots : ArrayBuffer[Int] = null
   private var seq : ArrayBuffer[(Int, ArrayBuffer[Int])] = null
 
   def getPivot = pivot
-
-  def getPivots = pivots
 
   def getSeq = seq
 
   def setPivot(pivot : Int) = {
     this.pivot = pivot
-  }
-
-  def setPivots(pivots : ArrayBuffer[Int]) = {
-    this.pivots = pivots
   }
 
   def setSeq(seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
@@ -33,24 +26,14 @@ class SuccTransaction {
     this.pivot = pivot
   }
 
-  def this(pivot: Int, pivots : ArrayBuffer[Int], seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
+  def this(pivot: Int, seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
     this()
     this.pivot = pivot
-    this.pivots = pivots
     this.seq = seq
   }
 
-  def clearSeq() = {
-    this.seq.clear()
-  }
-
-  def clearPivots() = {
-    this.pivot = 0
-    this.pivots.clear()
-  }
-
   def clear() = {
-    clearSeq()
-    clearPivots()
+    this.pivot = 0
+    this.seq.clear()
   }
 }

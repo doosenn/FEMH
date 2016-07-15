@@ -25,6 +25,7 @@ class PRMOD {
     val seq = t.getSeq.toArray
 
     val occs = new ArrayBuffer[(String, (Int, Int))]()
+    occs += ((pivot.toString, (time, time)))
     occs ++= expand(pivot.toString, (time, time), seq, RIGHT)
     occs ++= expand(pivot.toString, (time, time), seq, LEFT)
     occs

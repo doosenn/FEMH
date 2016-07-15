@@ -16,7 +16,6 @@ class EMMO {
   private var pivot = 0
   private var treeList = new ArrayBuffer[ArrayBuffer[TreeNode]]()
   private var container = new ArrayBuffer[(String, String)]()
-  private var result = new ArrayBuffer[(String, Int)]()
   private var rightExpandedNode = new HashSet[String]()
 //  private var leftExpandedNode = new HashSet[String]()
   private var seq : ArrayBuffer[(Int, ArrayBuffer[Int])] = null
@@ -48,28 +47,21 @@ class EMMO {
     //left expand process
     for((time, items) <- seq.reverse) {
       leftExpand(items, time)
-//      if(time == 1) {
-//        println("-------------")
-//        for(tree <- treeList) {
-//          for(node <- tree){
-//            println(node.getNodeMsg+"\t"+node.isMO())
-//          }
-//          println("-------------")
-//        }
-//      }
     }
     //unfinished left-expand-trees but the seq has ended
     for(tree <- treeList) {
       calTree2(tree)
     }
 
-    val d = container.groupBy(_._1)
-    for(dd <- d){
-      print(dd._1+":\t")
-      for(occ <- dd._2)
-        print(occ._2+"\t")
-      println
-    }
+    this.container
+
+//    val d = container.groupBy(_._1)
+//    for(dd <- d){
+//      print(dd._1+":\t")
+//      for(occ <- dd._2)
+//        print(occ._2+"\t")
+//      println
+//    }
   }
 
   def rightExpand(items : ArrayBuffer[Int], time : Int) = {
@@ -169,13 +161,12 @@ class EMMO {
   def rightExpandANodeInLeftBranch(root : TreeNode) = {
     val start = root.getStart
     val end = root.getEnd
-    val _right = seq.filter(x => (x._1 - start <= this.mtd && x._1 > end))
+    val _right = seq.filter(x => x._1 - start <= this.mtd && x._1 > end)
     val tree = ArrayBuffer[TreeNode](root)
     for(ses <- _right) {
       val time = ses._1
       for(node <- tree; if node.getEpisodeLen < this.maxLen) {
         val start = node.getStart
-        val end = node.getEnd
         val episode = node.getEpisode
         for(item <- ses._2) {
           val indexInFlist = this.flist_keys.indexOf(item)
@@ -223,13 +214,6 @@ class EMMO {
         this.container += ((episode, start.toString+":"+end))
       }
     }
-  }
-
-  def getResult() = {
-    val temp = this.container.groupBy(_._1).map(x => (x._1, x._2.length)).toArray
-    this.result.clear
-    this.result ++= temp
-    this.result
   }
 
 }
