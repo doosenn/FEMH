@@ -1,9 +1,10 @@
 package ict.mldm.main
 
-import ict.mldm.alg.{DMO, EMMO, PRMOD}
-import ict.mldm.util.{SuccTransaction, Transaction}
+import ict.mldm.alg.{DKE, EMMO, PRMOD}
+import ict.mldm.util.{Transaction, Transaction2}
 import java.io.{BufferedReader, File, InputStreamReader}
 import java.net.URI
+import java.math.BigDecimal
 
 import org.apache.commons.lang.StringUtils
 import org.apache.hadoop.conf.Configuration
@@ -12,7 +13,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.rdd.RDD
 
 import scala.io.Source
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 
 /**
@@ -23,12 +24,15 @@ object FEMH{
   private var hierarchyFile : String = null
   private var outputFile : String = null
   private var minSupport : Int = 0
-  private var mtd : Int= 0
+  private var mtd : Int = 0
   private var maxLen : Int = 0
   private var mode : String = "local"
-  private var alg : Char = 'p'
+  private var paraNum : Int = 1
+  private var alg : Char = 'e'
   private var jobName : String = "FEMH"
   private var record : Boolean = false
+  private var minTime : Int = 0
+  private var maxTime : Int = 1024
 
   def main(args: Array[String]): Unit = {
     parameters(args)
@@ -38,6 +42,13 @@ object FEMH{
   def run() = {
     println("Parallel FEMH Algorithm running.")
     val conf = new SparkConf().setAppName(this.jobName)
+    conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+    conf.set("spark.kryo.registrationRequired", "true")
+    conf.registerKryoClasses(Array(classOf[Transaction], classOf[Transaction2], classOf[Array[String]],
+        classOf[Array[Tuple3[_,_,_]]], classOf[Array[Int]], classOf[scala.reflect.ClassTag$$anon$1],
+        classOf[java.lang.Class[_]], classOf[Array[Tuple2[_,_]]], classOf[Array[Transaction]],
+        classOf[Array[Transaction2]], classOf[ArrayBuffer[_]], classOf[Array[Object]]))
+
     val sc = new SparkContext(conf)
     val b_minSupport = sc.broadcast(this.minSupport)
     val b_mtd = sc.broadcast(this.mtd)
@@ -53,14 +64,13 @@ object FEMH{
         temp += ((splits(0).toInt, e))
       temp
     })
-    //sequence_rdd.cache()
-
+//    sequence_rdd.cache()
     var source : Array[String] = null
     if(this.mode.equalsIgnoreCase("local")) {
-      source = readHierarchyFromLocal(hierarchyFile)   //read from local
+      source = readHierarchyFromLocal(hierarchyFile)  //read from local
     }
     else {
-      source = readHierarchyFromHdfs(hierarchyFile)  //read from hdfs
+      source = readHierarchyFromHdfs(hierarchyFile) //read from hdfs
     }
 
     val sourceItems = source.flatMap(StringUtils.split(_, "->"))
@@ -69,15 +79,15 @@ object FEMH{
     val diff_items = sequence_rdd.map(_._2).distinct().collect()
     val dictionary = getDictionary(diff_items, sourceItems)
     val reverseDic = dictionary.map(x=>(x._2, x._1))
+    val b_revDic = sc.broadcast(reverseDic)
     val b_dictionary = sc.broadcast(dictionary)
-
     //Hierarchy, a HashMap[Int, Int]
     val hierarchy = genHierarchy(source, dictionary)
     val b_hierarchy = sc.broadcast(hierarchy)
 
     //flist
     val flist = sequence_rdd.
-      map(x => (b_dictionary.value(x._2), x._1)).   // item time
+      map(x => (b_dictionary.value(x._2), x._1)).
       flatMap(y => {
         val re = getAncestorself(y._1, b_hierarchy.value).map(z => (z, y._2))
         re
@@ -91,12 +101,12 @@ object FEMH{
     val flist_keys = flist.map(_._1).collect()
     val b_flist_keys = sc.broadcast(flist_keys)
 
-    val startTime = System.currentTimeMillis()
+    println("*******Begin partition*******")
     var episodes : RDD[(String, Array[String])] = null
-    if(this.alg == 'd' || this.alg == 'p') {  //  Local mine alg selection
+    if(this.alg == 'p') {  //  Local mine alg selection, current alg PRMOD
       //transactions
       val transactions = flist.flatMap(x => {
-        val ts = new ArrayBuffer[Transaction]()
+        val ts = new ArrayBuffer[Transaction2]()
         val pivot = x._1
         val occs = x._2
         for(occ <- occs){
@@ -109,70 +119,125 @@ object FEMH{
                 true
               else
                 false
-                })
+            })
             seq ++= temp.map(x => (f._1, x))   //(item, time)
-              }
-          val t = new Transaction(pivot, occ)
+          }
+          val t = new Transaction2(pivot, occ)
           seq = seq.sortBy(_._2)
           t.setSeq(seq)
           ts += t
         }
         ts
       })
+      
+      println("*******Partitioning finished*******")
 
       //episode mining
-      if(this.alg == 'd') {
-        println("Local Mine Alg: DMO")
-        episodes = transactions.flatMap(x => {
-          val localMiner = new DMO(b_mtd.value, b_maxLen.value)
+      println("Local Mine Alg: PRMOD")
+      episodes = transactions.
+        flatMap(x => {
+          val localMiner = new PRMOD(b_mtd.value, b_maxLen.value)
           val eps = localMiner.mine(x)
           eps
-        }).flatMap(x => {
+        }).
+        map(x => (x._1, x._2._1 + ":" + x._2._2)).
+        groupByKey().
+        map(x => {
+          val occs = checkMO(x._2.toArray)
+          (x._1, occs)
+        }).
+        filter(_._2.length >= b_minSupport.value)
+    }
+    else if(this.alg == 'n') {  // alg : naive local mine
+      val temp = (this.maxTime * 1.0 - this.minTime) / this.paraNum
+      val interval = (new BigDecimal(temp).setScale(0, BigDecimal.ROUND_HALF_UP)).intValue
+      val bounds = new Array[Int](this.paraNum+1)
+      for(i <- 0 until this.paraNum) {
+        bounds(i) = this.minTime + interval * i
+      }
+      bounds(this.paraNum) = maxTime
+      val b_bounds = sc.broadcast(bounds)
+      val b_paraNum = sc.broadcast(this.paraNum)
+      val transactions = flist.
+        flatMap(x => {
+          val cate = new ArrayBuffer[(Int, Int, Array[Int])]()
+          for(flag <- 0 until b_paraNum.value) {
+            if(flag == b_paraNum.value - 1) {
+              val slice = x._2.filter(y => y >= b_bounds.value(flag) && y <= b_bounds.value(flag+1))
+              cate += ((flag, x._1, slice))
+            }
+            else {
+              val slice = x._2.filter(y => y >= b_bounds.value(flag) && y < b_bounds.value(flag+1))
+              cate += ((flag, x._1, slice))
+              val twomtds = x._2.
+                filter(y => y >= b_bounds.value(flag+1)-b_mtd.value && y <= b_bounds.value(flag+1)+b_mtd.value)
+              cate += ((flag+b_paraNum.value, x._1, twomtds))
+            }
+          }
+          cate
+        }).
+        groupBy(_._1).
+        map(x=>{
+          val xi = new ArrayBuffer[(Int, Int)]()
+          for(t3 <- x._2) {
+            for(occ <- t3._3) {
+              xi += ((occ, t3._2))
+            }
+          }
+          val seq = xi.groupBy(_._1).map(x=>{
+            val items = new HashSet[Int]()
+            for(t2 <- x._2) {
+              items += t2._2
+            }
+            (x._1, new ArrayBuffer[Int] ++= items)
+          }).toArray.sortBy(_._1)
+          val _seq = new ArrayBuffer[(Int, ArrayBuffer[Int])]() ++= seq
+          val t = new Transaction()
+          t.setSeq(_seq)
+          t
+        })
+      
+      println("*******Partitioning finished*******")
+      
+      episodes = transactions.
+        flatMap(x => {
+          val localMiner = new DKE(b_mtd.value, b_maxLen.value)
+          val eps = localMiner.mine2(x)
+          eps
+        }).
+        flatMap(x => {
           val temp = new ArrayBuffer[(String, String)]()
           for(occ <- x._2) {
             temp += ((x._1, occ))
           }
           temp
-        }).distinct().
-          groupByKey().
-          map(x => (x._1, x._2.toArray)).
-          filter(_._2.length >= b_minSupport.value)
-      }
-      else if(this.alg == 'p') {
-        println("Local Mine Alg: PRMOD")
-        episodes = transactions.flatMap(x => {
-          val localMiner = new PRMOD(b_mtd.value, b_maxLen.value)
-          val eps = localMiner.mine(x)
-          eps
-        }).map(x => (x._1, x._2._1 + ":" + x._2._2)).
-          groupByKey().
-          map(x => {
-            val occs = checkMO(x._2.toArray)
-            (x._1, occs)
-          }).
-          filter(_._2.length >= b_minSupport.value)
-      }
+        }).
+        distinct().
+        groupByKey().
+        map(x=>(x._1, x._2.toArray)).
+        filter(_._2.length >= b_minSupport.value)
     }
-    else if(this.alg == 'e' || this.alg == 'n') {
+    
+    else if(this.alg == 'e' || this.alg == 'd') {  // alg DKE or EMMO
       val transactions = flist.flatMap(x => {
-        val ts = new ArrayBuffer[SuccTransaction]()
+        val ts = new ArrayBuffer[Transaction]()
         val pivot = x._1
         val occs = x._2.sortWith(_ < _)
-        val zones = new ArrayBuffer[(Int, Int)]()
+        val zones = new ArrayBuffer[Array[Int]]()
         if(occs.length == 1) {
-          zones += ((occs(0), occs(0)))
+          zones += (Array(occs(0)))
         }
         else {
           var p = 0
           var start = 0
           while(p < occs.length - 1) {
             if(occs(p+1) - occs(p) > b_mtd.value) {
-              zones += ((occs(start), occs(p)))
+              zones += (occs.slice(start, p+1))
               start = p + 1
             }
             p += 1
             if(p == occs.length - 1) {
-              zones += ((occs(start), occs(p)))
+              zones += (occs.slice(start, p+1))
             }
           }
         }
@@ -180,18 +245,21 @@ object FEMH{
           var seq = new ArrayBuffer[(Int, Int)]()
           val keys = b_flist_keys.value
           for(f <- b_flist.value;if keys.indexOf(pivot) >= keys.indexOf(f._1)) {
-            seq ++= f._2.filter(x => x >= z._1 - b_mtd.value && x <= z._2 + b_mtd.value).map((_, f._1))
+            seq ++= f._2.filter(x => x >= z(0) - b_mtd.value && x <= z.last + b_mtd.value).map((_, f._1))
           }
           val _seq = seq.groupBy(_._1).map(x => {
             val items = for(y <- x._2) yield y._2
             (x._1, items)
-          }).toArray.sortBy(_._1)
-          val t = new SuccTransaction(pivot, new ArrayBuffer ++= _seq)
+          }).
+            toArray.
+            sortBy(_._1)
+          val t = new Transaction(pivot, new ArrayBuffer ++= _seq, z)
           ts += t
         }
         ts
       })
-
+      
+      println("*******Partitioning finished*******")
       //episode mining
       if(this.alg == 'e') {
         println("Local Mine Alg: EMMO")
@@ -199,37 +267,64 @@ object FEMH{
           val localMiner = new EMMO(b_mtd.value, b_maxLen.value, b_flist_keys.value)
           val eps = localMiner.mine(x)
           eps
-        }).groupByKey().map(x => (x._1, x._2.toArray)).filter(_._2.length >= b_minSupport.value)
+        }).
+          groupByKey().
+          map(x => (x._1, x._2.toArray)).
+          filter(_._2.length >= b_minSupport.value)
       }
-      else if(this.alg == 'n') {
-        println("Local Mine Alg: NOM")
-
+      else if(this.alg == 'd') {
+        println("Local Mine Alg: DMO")
+        episodes = transactions.
+          flatMap(x => {
+            val localMiner = new DKE(b_mtd.value, b_maxLen.value)
+            val eps = localMiner.mine(x)
+            eps
+          }).
+          flatMap(x => {
+            val temp = new ArrayBuffer[(String, String)]()
+            for(occ <- x._2) {
+              temp += ((x._1, occ))
+            }
+            temp
+          }).
+          groupByKey().
+          map(x => (x._1, x._2.toArray)).
+          filter(_._2.length >= b_minSupport.value)
       }
     }
 
-    val endTime = System.currentTimeMillis()
-    val msg = "Mine job finished in "+(endTime - startTime)+" ms."
-    println(msg)
-    println("Saving result..")
     if(this.record) {
-      val _episodes = episodes.map(x => {
-        val splits = StringUtils.split(x._1, "->")
-        val _splits = for(s <- splits) yield reverseDic(s.toInt)
-        var ep = ""
-        for(_s <- _splits) {
-          ep += _s + "->"
-        }
-        ep = ep.substring(0, ep.length - 2)
-        var str = ep + "\tSUPPORT:\t" + x._2.length + "\n"
-        for(occ <- x._2) {
-          str += occ + " "
-        }
-        str
-      })
+      val _episodes = episodes.
+        map(x => {
+          val splits = StringUtils.split(x._1, "->")
+          val _splits = for(s <- splits) yield b_revDic.value(s.toInt)
+          var ep = ""
+          for(_s <- _splits) {
+            ep += _s + "->"
+          }
+          ep = ep.substring(0, ep.length - 2)
+          var str = ep + "\tSUPPORT:\t" + x._2.length + "\n"
+          for(occ <- x._2) {
+            str += occ + " "
+          }
+          str
+        })
+      println("Text style convertion finished.")
       _episodes.repartition(1).saveAsTextFile(this.outputFile)
     }
-    else{
-      val _episodes = episodes.map(x => (x._1, x._2.length))
+    else {
+      val _episodes = episodes.
+        map(x => {
+          val splits = StringUtils.split(x._1, "->")
+          val _splits = for(s <- splits) yield b_revDic.value(s.toInt)
+          var ep = ""
+          for(_s <- _splits) {
+            ep += _s + "->"
+          }
+          ep = ep.substring(0, ep.length - 2)
+          val str = ep + "\tSUPPORT:\t" + x._2.length + "\n"
+          str
+        })
       _episodes.repartition(1).saveAsTextFile(this.outputFile)
     }
     println("Job Finished.")
@@ -262,6 +357,9 @@ object FEMH{
       else if (args(i).equalsIgnoreCase("-m")) {
         this.mode = args(i+1)
       }
+      else if (args(i).equalsIgnoreCase("-p")) {
+        this.paraNum = args(i+1).toInt
+      }
       else if (args(i).equalsIgnoreCase("-a")) {
         this.alg = args(i+1).charAt(0).toLower
       }
@@ -273,7 +371,15 @@ object FEMH{
           this.record = true
         }
       }
+      else if (args(i).equalsIgnoreCase("-ti")) {
+        this.minTime = args(i+1).toInt
+      }
+      else if (args(i).equalsIgnoreCase("-tm")) {
+        this.maxTime = args(i+1).toInt
+      }
     }
+    if(this.maxLen > this.mtd)
+      this.maxLen = this.mtd
   }
 
   def readHierarchyFromLocal(path: String) = {

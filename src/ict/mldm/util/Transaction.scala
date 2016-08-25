@@ -3,30 +3,29 @@ package ict.mldm.util
 import scala.collection.mutable.ArrayBuffer
 
 /**
-  * Created by Zorro on 16/6/13.
+  * Created by zuol on 16-7-2.
   */
 class Transaction {
   private var pivot : Int = 0
-  private var time : Int = 0
-  private var seq : ArrayBuffer[(Int, Int)] = null
+  private var seq : ArrayBuffer[(Int, ArrayBuffer[Int])] = null
+  private var pivotPos : Array[Int] = null
 
   def getPivot = pivot
 
-  def getTime = time
-
   def getSeq = seq
-
+  
+  def getPivotPos = pivotPos
 
   def setPivot(pivot : Int) = {
     this.pivot = pivot
   }
 
-  def setTime(time : Int) = {
-    this.time = time
-  }
-
-  def setSeq(seq : ArrayBuffer[(Int, Int)]) = {
+  def setSeq(seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
     this.seq = seq
+  }
+  
+  def setPivotPos(pivotPos : Array[Int]) = {
+    this.pivotPos = pivotPos
   }
 
   def this(pivot: Int) = {
@@ -34,10 +33,15 @@ class Transaction {
     this.pivot = pivot
   }
 
-  def this(pivot: Int, time : Int) = {
+  def this(pivot: Int, seq : ArrayBuffer[(Int, ArrayBuffer[Int])], pivotPos : Array[Int]) = {
     this()
     this.pivot = pivot
-    this.time = time
+    this.seq = seq
+    this.pivotPos = pivotPos
   }
 
+  def clear() = {
+    this.pivot = 0
+    this.seq.clear()
+  }
 }

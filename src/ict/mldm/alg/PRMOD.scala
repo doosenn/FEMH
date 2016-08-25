@@ -1,6 +1,6 @@
 package ict.mldm.alg
 
-import ict.mldm.util.Transaction
+import ict.mldm.util.Transaction2
 import org.apache.commons.lang.StringUtils
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -19,7 +19,7 @@ class PRMOD {
     this.maxLen = maxLen
   }
 
-  def mine(t : Transaction) = {
+  def mine(t : Transaction2) = {
     val pivot = t.getPivot
     val time = t.getTime
     val seq = t.getSeq.toArray
@@ -49,7 +49,7 @@ class PRMOD {
           if(!tmpSet.contains(ex)) {
             val tmp = (ex, (t._2, interval._2))
             expanded += tmp
-            expanded ++= expand(tmp._1, tmp._2, array, LEFT) //para[2] must be array, not _left
+            expanded ++= expand(tmp._1, tmp._2, array, LEFT) //para[2] must be original array, not _left
             expanded ++= expand(tmp._1, tmp._2, _right, RIGHT)
           }
           tmpSet.add(ex)

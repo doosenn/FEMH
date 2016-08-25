@@ -6,10 +6,8 @@ import scala.collection.mutable.ArrayBuffer
   * Created by Zorro on 16/6/6.
   */
 class TreeNode {
-  private var value : Int = 0
   private var start : Int = 0
   private var end : Int = 0
-  private var indexInFlist = 0
   private var flistSize : Int = 0
   private var exists : Array[Int] = null
   private var episode : String = null
@@ -18,11 +16,12 @@ class TreeNode {
   private val RIGHT = false
   private val LEFT = true
 
-  def this(value: Int, flistSize: Int, indexInFlist : Int) = {
+  def this(episode : String, start : Int, end : Int, flistSize: Int) = {
     this()
-    this.value = value
+    this.episode = episode
+    this.start = start
+    this.end = end
     this.flistSize = flistSize
-    this.indexInFlist = indexInFlist
     this.exists = new Array[Int](flistSize).map(_ => 0)
   }
 
@@ -40,15 +39,11 @@ class TreeNode {
       false
   }
 
-  def getValue = this.value
-
   def getWindow = (this.start, this.end)
 
   def getStart = this.start
 
   def getEnd = this.end
-
-  def getIndexInFlist = this.indexInFlist
 
   def getExists = this.exists
 
@@ -62,10 +57,6 @@ class TreeNode {
 
   def isMO() = this.isMinimal
 
-  def setValue(value: Int) = {
-    this.value = value
-  }
-
   def setWindow(window: (Int, Int)) = {
     this.start = window._1
     this.end = window._2
@@ -77,10 +68,6 @@ class TreeNode {
 
   def setEnd(end : Int) = {
     this.end = end
-  }
-
-  def setIndexInFlist(index: Int) = {
-    this.indexInFlist = index
   }
 
   def setFlistSize(size: Int) = {

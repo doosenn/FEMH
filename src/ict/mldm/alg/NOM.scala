@@ -1,6 +1,6 @@
 package ict.mldm.alg
 
-import ict.mldm.util.SuccTransaction
+import ict.mldm.util.Transaction
 import scala.collection.mutable.ArrayBuffer
 /**
   * Created by zuol on 16-7-6.
@@ -15,7 +15,7 @@ class NOM {
     this.maxLen = maxLen
   }
 
-  def mine(t : SuccTransaction) = {
+  def mine(t : Transaction) = {
     val seq = t.getSeq
     val pivot = t.getPivot
 
