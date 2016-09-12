@@ -1,44 +1,34 @@
 package ict.mldm.alg
 
-import ict.mldm.util.Transaction
-import org.apache.commons.lang.StringUtils
-
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.Breaks._
 
 /**
   * Created by Zorro on 16/6/12.
   */
-class DKE {
-  private var mtd : Int = 0
-  private var maxLen = 0
+class DKE (pseq : ArrayBuffer[(Long, ArrayBuffer[Int])], ppivot : Int, pmtd : Int) {
+  private val pivot = ppivot
+  private val seq = pseq
+  private val mtd = pmtd
   private val result = new ArrayBuffer[(String, Array[String])]()
 
-  def this(mtd : Int, maxIter : Int) = {
-    this()
-    this.mtd = mtd
-    this.maxLen = maxIter
+  def this(seq : ArrayBuffer[(Long, ArrayBuffer[Int])], mtd : Int) = {
+    this(seq, 0, mtd)
   }
   
-  def mine(t : Transaction) = {
-    val seq = t.getSeq
-    val pivot = t.getPivot.toString()
-    val pivotPos = t.getPivotPos
-    calOccs(seq)
-  
-    val eps = this.result.filter(_._1.split("->").contains(pivot))
-    eps
+  def mine() = {
+    calOccs()
+    this.result.filter(_._1.split("->").contains(pivot)).map(ep => (ep._1, ep._2.length))
   }
   
-  def mine2(t : Transaction) = {
-    val seq = t.getSeq
-    calOccs(seq)
-    this.result
+  def mine2() = {
+    calOccs()
+    this.result.flatMap{case (ep, occs) => for(occ <- occs) yield (ep, occ)}
   }
   
-  def calOccs(seq : ArrayBuffer[(Int, ArrayBuffer[Int])]) = {
-    val f1 = seq.flatMap(x=>{
-      val temp = new ArrayBuffer[(Int, Int)]()
+  def calOccs() = {
+    val f1 = this.seq.flatMap(x=>{
+      val temp = new ArrayBuffer[(Int, Long)]()
       for(item <- x._2) {
         temp += ((item, x._1))
       }
@@ -56,7 +46,7 @@ class DKE {
 
   def recursivefn(ap: String, mo_ap: Array[String], f1: Array[(String, Array[String])]): Array[(String, Array[String])] = {
     val aps = new ArrayBuffer[(String, Array[String])]()
-    if(ap.split("->").length < this.maxLen) {
+    if(ap.split("->").length < this.mtd) {
       for(one <- f1) {
         val a = ap +"->"+one._1
         val mo_a = computeMO(mo_ap, one._2)

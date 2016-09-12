@@ -1,13 +1,11 @@
 package ict.mldm.util
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
   * Created by Zorro on 16/6/6.
   */
 class TreeNode {
-  private var start : Int = 0
-  private var end : Int = 0
+  private var start : Long = 0
+  private var end : Long = 0
   private var flistSize : Int = 0
   private var exists : Array[Int] = null
   private var episode : String = null
@@ -16,7 +14,7 @@ class TreeNode {
   private val RIGHT = false
   private val LEFT = true
 
-  def this(episode : String, start : Int, end : Int, flistSize: Int) = {
+  def this(episode : String, start : Long, end : Long, flistSize: Int) = {
     this()
     this.episode = episode
     this.start = start
@@ -51,27 +49,14 @@ class TreeNode {
 
   def getEpisode = this.episode
 
-  def getEpisodeLen = this.episode.split("->").length
-
-  def getNodeMsg = this.episode+"@"+this.start+":"+this.end
-
   def isMO() = this.isMinimal
 
-  def setWindow(window: (Int, Int)) = {
-    this.start = window._1
-    this.end = window._2
-  }
-
-  def setStart(start : Int) = {
+  def setStart(start : Long) = {
     this.start = start
   }
 
-  def setEnd(end : Int) = {
+  def setEnd(end : Long) = {
     this.end = end
-  }
-
-  def setFlistSize(size: Int) = {
-    this.flistSize = size
   }
 
   def setExists(index : Int, dir : Boolean) = {
@@ -81,19 +66,6 @@ class TreeNode {
     else if(dir == RIGHT){
       this.exists(index) |= 0x01
     }
-  }
-
-  def clrExists(index : Int, dir : Boolean) = {
-    if(dir == LEFT) {
-      this.exists(index) &= 0x0f
-    }
-    else if(dir == RIGHT){
-      this.exists(index) &= 0xf0
-    }
-  }
-
-  def setEpisode(item : String) = {
-    this.episode = item
   }
 
   def setIsMO(tf : Boolean) = {
