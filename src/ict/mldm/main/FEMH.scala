@@ -192,7 +192,11 @@ class FEMH {
         }
       }).
       reduceByKey(_ + _).
-      filter(_._2 >= paras.get("minSupport").get.toInt)
+      filter(_._2 >= paras.get("minSupport").get.toInt).
+      map(x => {
+        val _episode = StringUtils.split(x._1, "->").map(b_revDic.value(_)).mkString("->")
+        (_episode, x._2)
+      })
 
     episodes.repartition(1).saveAsTextFile(paras.get("outputPath").get)
 
