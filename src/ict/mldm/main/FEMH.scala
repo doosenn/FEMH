@@ -14,12 +14,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkContext}
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.{mutable => m}
 import scala.util.control.Breaks
 
 object FEMH {
   def main(args : Array[String]) :Unit = {
-    val paras = new HashMap[String, String]()
+    val paras = new m.HashMap[String, String]()
     for(i <- args.indices) {
       args(i) match {
         case "-i" => paras("sequenceFile") = args(i+1)
@@ -36,27 +36,27 @@ object FEMH {
       }
     }
 
-    if(paras.get("sequenceFile") == None ||
-    paras.get("hierarchyFile") == None ||
-    paras.get("outputPath") == None ||
-    paras.get("minSupport") == None ||
-    paras.get("alg") == None ||
-    paras.get("jobName") == None) {
+    if(paras.get("sequenceFile").isEmpty ||
+    paras.get("hierarchyFile").isEmpty ||
+    paras.get("outputPath").isEmpty ||
+    paras.get("minSupport").isEmpty ||
+    paras.get("alg").isEmpty ||
+    paras.get("jobName").isEmpty) {
       println("Wrong parameters! Exit!")
       System.exit(0)
     }
-    if(paras.get("minSupport") == None) {
+    if(paras.get("minSupport").isEmpty) {
       paras("minSupport") = "1"
     }
-    if(paras.get("mtd") == None) {
+    if(paras.get("mtd").isEmpty) {
       paras("mtd") = "2"
     }
-    if(paras.get("paraNum") == None) {
+    if(paras.get("paraNum").isEmpty) {
       paras("paraNum") = "6"
     }
-    if(paras.get("alg") == "n") {
-      if(paras.get("beginTime") == None ||
-      paras.get("endTime") == None) {
+    if(paras("alg") == "n") {
+      if(paras.get("beginTime").isEmpty ||
+      paras.get("endTime").isEmpty) {
         println("Either start or end time exists!")
         System.exit(0)
       }
@@ -69,27 +69,26 @@ object FEMH {
 
 class FEMH {
 
-  def run(paras : HashMap[String, String]) = {
+  def run(paras : m.HashMap[String, String]) = {
     println("Parallel FEMH Algorithm Running...")
-    val conf = new SparkConf().setAppName(paras.get("jobName").get)
+    val conf = new SparkConf().setAppName(paras("jobName"))
     conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     conf.set("spark.kryo.registrationRequired", "true")
     conf.registerKryoClasses(Array(classOf[Transaction], classOf[Array[String]],
-      classOf[Array[Tuple3[_,_,_]]], classOf[Array[Int]], //classOf[scala.reflect.ClassTag$$anon$1],
-      classOf[java.lang.Class[_]], classOf[Array[Tuple2[_,_]]], classOf[Array[Transaction]],
-      classOf[ArrayBuffer[_]], classOf[Array[Object]]))
+      classOf[Array[(_,_,_)]], classOf[Array[Int]], //classOf[scala.reflect.ClassTag$$anon$1],
+      classOf[java.lang.Class[_]], classOf[Array[(_,_)]], classOf[Array[Transaction]],
+      classOf[m.ArrayBuffer[_]], classOf[Array[Object]]))
 
     val sc = new SparkContext(conf)
-    val lines = sc.textFile(paras.get("sequenceFile").get)
+    val lines = sc.textFile(paras("sequenceFile"))
 
-    val sequence_rdd = lines.flatMap{case line => {
+    val sequence_rdd = lines.flatMap(line => {
       val splits = StringUtils.split(line, '\t')
-      val items = StringUtils.split(splits(1), ",")
-      items.map{case item => (splits(0).toLong, item)}
-    }}  //time item
+      StringUtils.split(splits(1), ",").map(item => (splits(0).toLong, item))
+    })  //time item
     sequence_rdd.cache()
 
-    val hsource = readHierarchyFromHdfs(paras.get("hierarchyFile").get)
+    val hsource = readHierarchyFromHdfs(paras("hierarchyFile"))
     val sourceItems = hsource.flatMap(StringUtils.split(_, "->"))
 
     // Get dictionary and hierarchy
@@ -98,15 +97,15 @@ class FEMH {
     val reverseDic = dictionary.map{case (item, id) => (id, item)}
     val b_revDic = sc.broadcast(reverseDic)
     val b_dictionary = sc.broadcast(dictionary)
-    val hierarchy = hsource.map{case line => {
+    val hierarchy = hsource.map(line => {
       val splits = StringUtils.split(line, "->")
       (splits(0), splits(1))
-    }}.map(t => (dictionary(t._1), dictionary(t._2))).toMap
+    }).map(t => (dictionary(t._1), dictionary(t._2))).toMap
 
     val flist = sequence_rdd.
       map(x => (b_dictionary.value(x._2), x._1)).
       flatMap(y => {
-        val re = new ArrayBuffer[Int]()
+        val re = new m.ArrayBuffer[Int]()
         var item = y._1
         while(hierarchy.contains(item)) {
           re+= hierarchy(item)
@@ -115,7 +114,7 @@ class FEMH {
         (re+=y._1).map(z => (z, y._2))
       }).
       groupByKey().
-      filter(_._2.size >= paras.get("minSupport").get.toLong).
+      filter(_._2.size >= paras("minSupport").toLong).
       map(x => (x._1, x._2.toArray))
     flist.cache()
     sequence_rdd.unpersist()
@@ -134,29 +133,29 @@ class FEMH {
     val transactions = flist.flatMap(x => {
       paras.get("alg") match {
         //case "n" => {}
-        case _ => {
-          val ts = ArrayBuffer[Transaction]()
+        case _ =>
+          val ts = m.ArrayBuffer[Transaction]()
           val pivot = x._1
           val occs = x._2.sortWith(_ < _)
           val zones = occs.length match {
-            case 1 => ArrayBuffer((occs(0), occs(0)))
-            case _ => splitArrayWithMTD(occs, paras.get("mtd").get.toInt)
+            case 1 => m.ArrayBuffer((occs(0), occs(0)))
+            case _ => splitArrayWithMTD(occs, paras("mtd").toInt)
           }
 
           val _flist = b_flist.value
           val map = b_flist_keymap.value
-          val mtd = paras.get("mtd").get.toInt
+          val mtd = paras("mtd").toInt
           var idx = 0
           val pivotNums = map(pivot)
           for(z <- zones) {
-            val seq = new ArrayBuffer[(Long, ArrayBuffer[Int])]()
+            val seq = new m.ArrayBuffer[(Long, m.ArrayBuffer[Int])]()
             while(idx < _flist.length && z._1-mtd > _flist(idx)._1) idx += 1
             val start = idx
             while(idx < _flist.length && z._2+mtd >= _flist(idx)._1) idx += 1
             val end = idx - 1
             for(i <- start to end) {
               val time = _flist(i)._1
-              val items = new ArrayBuffer[Int]()
+              val items = new m.ArrayBuffer[Int]()
               val loop = new Breaks
               loop.breakable {
                 for(item <- _flist(i)._2) {
@@ -167,38 +166,35 @@ class FEMH {
               seq += ((time, items))
             }
             val _seq = seq.toArray
-            val t = new Transaction(pivot, new ArrayBuffer ++= _seq)
+            val t = new Transaction(pivot, new m.ArrayBuffer ++= _seq)
             ts += t
             idx = Math.max(0, end - mtd)
           }
           ts
-        }
       }
     })
 
     val episodes = transactions.
       flatMap(t => {
-        val mtd = paras.get("mtd").get.toInt
+        val mtd = paras("mtd").toInt
         val keys = b_flist_keymap.value.keys.toArray
-        paras.get("alg").get match {
-          case "e" => {
+        paras("alg") match {
+          case "e" =>
             val localMiner = new EMMO(t.getSeq, t.getPivot, mtd, keys)
             localMiner.mine()
-          }
-          case "d" => {
+          case "d" =>
             val localMiner = new DKE(t.getSeq, t.getPivot, mtd)
             localMiner.mine()
-          }
         }
       }).
       reduceByKey(_ + _).
-      filter(_._2 >= paras.get("minSupport").get.toInt).
+      filter(_._2 >= paras("minSupport").toInt).
       map(x => {
-        val _episode = StringUtils.split(x._1, "->").map(b_revDic.value(_)).mkString("->")
+        val _episode = StringUtils.split(x._1, "->").map(x => b_revDic.value(x.toInt)).mkString("->")
         (_episode, x._2)
       })
 
-    episodes.repartition(1).saveAsTextFile(paras.get("outputPath").get)
+    episodes.repartition(1).saveAsTextFile(paras("outputPath"))
 
     println("Job Finished.")
 
@@ -208,7 +204,7 @@ class FEMH {
     if(path == null) {
       new Array[String](0)
     }
-    val source = new ArrayBuffer[String]()
+    val source = new m.ArrayBuffer[String]()
     val conf = new Configuration()
     val fs = FileSystem.get(URI.create(path), conf)
     val ins = fs.open(new Path(path))
@@ -223,7 +219,7 @@ class FEMH {
   }
 
   def splitArrayWithMTD(occs : Array[Long], mtd : Int) = {
-    var tmp = new ArrayBuffer[(Long, Long)]()
+    var tmp = new m.ArrayBuffer[(Long, Long)]()
     var p = 0
     var start = 0
     while(p < occs.length - 1) {

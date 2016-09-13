@@ -1,60 +1,53 @@
 package ict.mldm.alg
 
-import ict.mldm.util.{Transaction, TreeNode}
-import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap}
+import ict.mldm.util.TreeNode
+import scala.collection.{mutable => m}
 
 /**
   * Created by zuol on 16-7-3.
   */
-class EMMO (pseq : ArrayBuffer[(Long, ArrayBuffer[Int])], ppivot : Int, pmtd : Int, pflist_keys : Array[Int]){
+class EMMO (pseq : m.ArrayBuffer[(Long, m.ArrayBuffer[Int])], ppivot : Int, pmtd : Int, pflist_keys : Array[Int]){
   private val LEFT = true
   private val RIGHT = false
 
   private val mtd = pmtd
   private val flist_keys : Array[Int] = pflist_keys
   private val pivot = ppivot
-  private val treeList = new ArrayBuffer[ArrayBuffer[TreeNode]]()
-  private val container = new ArrayBuffer[(String, Int)]()
-  private val seq : ArrayBuffer[(Long, ArrayBuffer[Int])] = pseq
+  private val treeList = new m.ArrayBuffer[m.ArrayBuffer[TreeNode]]()
+  private val container = new m.ArrayBuffer[(String, Int)]()
+  private val seq : m.ArrayBuffer[(Long, m.ArrayBuffer[Int])] = pseq
 
 
   def mine() = {
-    for((time, items) <- this.seq.reverse) {
-      leftExpand(items, time)
-    }
+    for((time, items) <- this.seq.reverse) leftExpand(items, time)
+
+    for((time, items) <- this.seq) rightExpand(items, time)
     
-    for((time, items) <- this.seq) {
-      rightExpand(items, time)
-    }
-    
-    for(tree <- this.treeList) {
-      calTree(tree)
-    }
+    for(tree <- this.treeList) calTree(tree)
     
     this.container
   }
 
-  def leftExpand(items : ArrayBuffer[Int], time : Long) = {
-    val Q = new HashSet[String]()
-    if(items.contains(this.pivot))
+  def leftExpand(items : m.ArrayBuffer[Int], time : Long) = {
+    val Q = new m.HashSet[String]()
+    val itemsContainPivot = items.contains(this.pivot)
+    if(itemsContainPivot)
       Q += pivot.toString
     for(i <- this.treeList.indices.reverse) {
-      val tmpList = this.treeList(i)
-      val rootStart = tmpList(0).getStart
+      val curTree = this.treeList(i)
+      val rootStart = curTree(0).getStart
       if(time < rootStart && rootStart - time < this.mtd) { //  update the whole tree
-        for(node <- tmpList) {
+        for(node <- curTree; if node.isMO) {
           val episode = node.getEpisode
           for(item <- items) {
-            if(node.isMO()) {
-              val indexInFlist = this.flist_keys.indexOf(item)
-              if(!node.isLeftContained(indexInFlist)) {
-                node.setExists(indexInFlist, LEFT)
-                val end = node.getEnd
-                val newEpisode = item+"->"+episode
-                val newNode = new TreeNode(newEpisode, time, end, this.flist_keys.length)
-                tmpList += newNode
-                Q += newEpisode
-              }
+            val indexInFlist = this.flist_keys.indexOf(item)
+            if(!node.isLeftContained(indexInFlist)) {
+              node.setExists(indexInFlist, LEFT)
+              val end = node.getEnd
+              val newEpisode = item+"->"+episode
+              val newNode = new TreeNode(newEpisode, time, end, this.flist_keys.length)
+              curTree += newNode
+              Q += newEpisode
             }
           }
           if(Q.contains(episode)) {
@@ -64,14 +57,14 @@ class EMMO (pseq : ArrayBuffer[(Long, ArrayBuffer[Int])], ppivot : Int, pmtd : I
       }
     }
 
-    if(items.contains(this.pivot)) {
+    if(itemsContainPivot) {
       val newNode = new TreeNode(this.pivot.toString, time, time, this.flist_keys.length)
-      this.treeList += ArrayBuffer[TreeNode](newNode)
+      this.treeList += m.ArrayBuffer[TreeNode](newNode)
     }
   }
   
-  def rightExpand(items : ArrayBuffer[Int], time : Long) = {
-    val Q = new HashSet[String]()
+  def rightExpand(items : m.ArrayBuffer[Int], time : Long) = {
+    val Q = new m.HashSet[String]()
     if(items.contains(this.pivot)) {
         Q += this.pivot.toString
     }
@@ -101,12 +94,7 @@ class EMMO (pseq : ArrayBuffer[(Long, ArrayBuffer[Int])], ppivot : Int, pmtd : I
     }
   }
 
-  def calTree(tree : ArrayBuffer[TreeNode]) = {
-    for(node <- tree) {
-      val episode = node.getEpisode
-//      val window = node.getStart + ":" + node.getEnd
-      container += ((episode, 1))
-    }
-  }
+  def calTree(tree : m.ArrayBuffer[TreeNode]) =
+    tree.foreach(node => this.container += ((node.getEpisode, 1)))
 
 }

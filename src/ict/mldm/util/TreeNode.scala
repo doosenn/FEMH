@@ -3,41 +3,21 @@ package ict.mldm.util
 /**
   * Created by Zorro on 16/6/6.
   */
-class TreeNode {
-  private var start : Long = 0
-  private var end : Long = 0
-  private var flistSize : Int = 0
-  private var exists : Array[Int] = null
-  private var episode : String = null
+class TreeNode(pepisode : String, pstart : Long, pend : Long, pflistSize: Int){
+  private val start : Long = pstart
+  private val end : Long = pend
+  private val flistSize : Int = pflistSize
+  private val exists : Array[Int] = new Array[Int](flistSize).map(_ => 0)
+  private val episode : String = pepisode
   private var isMinimal : Boolean = true
 
   private val RIGHT = false
   private val LEFT = true
 
-  def this(episode : String, start : Long, end : Long, flistSize: Int) = {
-    this()
-    this.episode = episode
-    this.start = start
-    this.end = end
-    this.flistSize = flistSize
-    this.exists = new Array[Int](flistSize).map(_ => 0)
-  }
 
-  def isLeftContained(indexOfThisChildInFlist: Int) = {
-    if((exists(indexOfThisChildInFlist) & 0x10) == 0x10)
-      true
-    else
-      false
-  }
+  def isLeftContained(indexOfThisChildInFlist : Int) = (exists(indexOfThisChildInFlist) & 0x10) == 0x10
 
-  def isRightContained(indexOfThisChildInFlist : Int) = {
-    if((exists(indexOfThisChildInFlist) & 0x01) == 0x01)
-      true
-    else
-      false
-  }
-
-  def getWindow = (this.start, this.end)
+  def isRightContained(indexOfThisChildInFlist : Int) = (exists(indexOfThisChildInFlist) & 0x01) == 0x01
 
   def getStart = this.start
 
@@ -49,27 +29,14 @@ class TreeNode {
 
   def getEpisode = this.episode
 
-  def isMO() = this.isMinimal
+  def isMO = this.isMinimal
 
-  def setStart(start : Long) = {
-    this.start = start
-  }
+  def setIsMO(tf : Boolean) = this.isMinimal = tf
 
-  def setEnd(end : Long) = {
-    this.end = end
-  }
-
-  def setExists(index : Int, dir : Boolean) = {
-    if(dir == LEFT) {
-      this.exists(index) |= 0x10
+  def setExists(index : Int, dir : Boolean) =
+    dir match {
+      case LEFT => this.exists(index) |= 0x10
+      case RIGHT => this.exists(index) |= 0x01
     }
-    else if(dir == RIGHT){
-      this.exists(index) |= 0x01
-    }
-  }
-
-  def setIsMO(tf : Boolean) = {
-    this.isMinimal = tf
-  }
 
 }

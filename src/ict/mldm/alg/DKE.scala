@@ -35,7 +35,7 @@ class DKE (pseq : ArrayBuffer[(Long, ArrayBuffer[Int])], ppivot : Int, pmtd : In
       temp
     }).groupBy(_._1).map(x => {
       val occs = for(e <- x._2) yield e._2+":"+e._2
-      (x._1.toString(), occs.toArray)
+      (x._1.toString, occs.toArray)
     })
     
     for(one <- f1) {

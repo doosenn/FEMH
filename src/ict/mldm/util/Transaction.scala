@@ -13,8 +13,6 @@ class Transaction(ppivot : Int, pseq : ArrayBuffer[(Long, ArrayBuffer[Int])]){
 
   def getSeq = seq
 
-  def this(seq : ArrayBuffer[(Long, ArrayBuffer[Int])]) = {
-    this(0, seq)
-  }
+  def this(seq : ArrayBuffer[(Long, ArrayBuffer[Int])]) = this(0, seq)
 
 }
